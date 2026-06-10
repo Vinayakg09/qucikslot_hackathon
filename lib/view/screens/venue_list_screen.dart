@@ -67,7 +67,7 @@ class _VenueListScreenState extends State<VenueListScreen> {
             icon: const Icon(Icons.calendar_month, color: AppColors.primary),
             onPressed: () => context.push(
               RouteTo.myBookings,
-              extra: {'userId': widget.userId},
+              extra: widget.userId,
             ),
           ),
         ],
