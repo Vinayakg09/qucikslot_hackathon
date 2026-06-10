@@ -2,44 +2,32 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import '../../cubit/auth/auth_cubit.dart';
-import '../../cubit/auth/auth_state.dart';
 import '../../cubit/booking/booking_cubit.dart';
 import '../../cubit/booking/booking_state.dart';
 import '../../cubit/slot/slot_cubit.dart';
 import '../../cubit/slot/slot_state.dart';
 import '../../models/slot.dart';
 import '../../models/venue.dart';
-import '../../repo/booking_repo.dart';
-import '../../repo/slot_repo.dart';
 import '../../res/app_colors.dart';
 import '../widgets/slot_grid.dart';
 
-class VenueDetailScreen extends StatelessWidget {
+class VenueDetailScreen extends StatefulWidget {
   final Venue venue;
-  const VenueDetailScreen({super.key, required this.venue});
+  final String userId;
+  const VenueDetailScreen({
+    super.key,
+    required this.venue,
+    required this.userId,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => SlotCubit(SlotRepo())),
-        BlocProvider(create: (_) => BookingCubit(BookingRepo())),
-      ],
-      child: _VenueDetailBody(venue: venue),
-    );
-  }
+  State<VenueDetailScreen> createState() => _VenueDetailScreenState();
 }
 
-class _VenueDetailBody extends StatefulWidget {
-  final Venue venue;
-  const _VenueDetailBody({required this.venue});
+class _VenueDetailScreenState extends State<VenueDetailScreen> {
+  final SlotCubit slotCubit = SlotCubit();
+  final BookingCubit bookingCubit = BookingCubit();
 
-  @override
-  State<_VenueDetailBody> createState() => _VenueDetailBodyState();
-}
-
-class _VenueDetailBodyState extends State<_VenueDetailBody> {
   DateTime _selectedDate = DateTime.now();
 
   String get _formattedDate => DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -48,11 +36,18 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
   @override
   void initState() {
     super.initState();
-    context.read<SlotCubit>().loadSlots(widget.venue.id, _formattedDate);
+    slotCubit.loadSlots(widget.venue.id, _formattedDate);
+  }
+
+  @override
+  void dispose() {
+    slotCubit.close();
+    bookingCubit.close();
+    super.dispose();
   }
 
   void _loadSlots() {
-    context.read<SlotCubit>().loadSlots(widget.venue.id, _formattedDate);
+    slotCubit.loadSlots(widget.venue.id, _formattedDate);
   }
 
   Future<void> _pickDate() async {
@@ -78,101 +73,105 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
   }
 
   void _onSlotTap(Slot slot) {
-    final authState = context.read<AuthCubit>().state;
-    if (authState is! AuthAuthenticated) return;
-    final user = authState.user;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => BlocProvider.value(
-        value: context.read<BookingCubit>(),
-        child: BlocConsumer<BookingCubit, BookingState>(
-          listener: (context, state) {
-            if (state is BookingSuccess) {
-              Navigator.pop(context);
-              _loadSlots();
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(
-                  content: Text('✅ Slot booked successfully!'),
-                  backgroundColor: AppColors.available,
-                ),
-              );
-            } else if (state is BookingConflict) {
-              Navigator.pop(context);
-              _loadSlots();
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                      '⚠️ Sorry! This slot was just taken. Please pick another.'),
-                  backgroundColor: AppColors.booked,
-                ),
-              );
-            } else if (state is BookingError) {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(
-                  content: Text(state.message),
-                  backgroundColor: AppColors.booked,
-                ),
-              );
-            }
-          },
-          builder: (context, state) {
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Confirm Booking',
-                      style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 20),
-                  _infoRow(Icons.sports, widget.venue.sport),
-                  _infoRow(Icons.stadium, widget.venue.name),
-                  _infoRow(Icons.location_on, widget.venue.address),
-                  _infoRow(Icons.calendar_today, _displayDate),
-                  _infoRow(Icons.access_time,
-                      '${slot.startTime} - ${slot.endTime}'),
-                  _infoRow(Icons.currency_rupee, '₹${slot.price.toInt()}'),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                      ),
-                      onPressed: state is BookingLoading
-                          ? null
-                          : () {
-                              context.read<BookingCubit>().createBooking(
-                                    slotId: slot.id,
-                                    date: _formattedDate,
-                                    userId: user.id,
-                                  );
-                            },
-                      child: state is BookingLoading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white)
-                          : const Text('Confirm Booking',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => BlocConsumer<BookingCubit, BookingState>(
+        bloc: bookingCubit,
+        listener: (context, state) {
+          if (state is BookingSuccess) {
+            Navigator.pop(context);
+            _loadSlots();
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Slot booked successfully!'),
+                backgroundColor: AppColors.available,
               ),
             );
-          },
-        ),
+          } else if (state is BookingConflict) {
+            Navigator.pop(context);
+            _loadSlots();
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  '⚠️ Sorry! This slot was just taken. Please pick another.',
+                ),
+                backgroundColor: AppColors.booked,
+              ),
+            );
+          } else if (state is BookingError) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppColors.booked,
+              ),
+            );
+          }
+        },
+        builder: (context, state) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Confirm Booking',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _infoRow(Icons.sports, widget.venue.sport),
+                _infoRow(Icons.stadium, widget.venue.name),
+                _infoRow(Icons.location_on, widget.venue.address),
+                _infoRow(Icons.calendar_today, _displayDate),
+                _infoRow(
+                  Icons.access_time,
+                  '${slot.startTime} - ${slot.endTime}',
+                ),
+                _infoRow(Icons.currency_rupee, '₹${slot.price.toInt()}'),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: state is BookingLoading
+                        ? null
+                        : () {
+                            bookingCubit.createBooking(
+                              slotId: slot.id,
+                              date: _formattedDate,
+                              userId: widget.userId,
+                            );
+                          },
+                    child: state is BookingLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Confirm Booking',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -184,9 +183,10 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
         children: [
           Icon(icon, color: AppColors.primary, size: 18),
           const SizedBox(width: 12),
-          Text(text,
-              style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 15)),
+          Text(
+            text,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+          ),
         ],
       ),
     );
@@ -196,13 +196,15 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
     return Row(
       children: [
         Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 6),
-        Text(label,
-            style: const TextStyle(
-                color: AppColors.textSecondary, fontSize: 12)),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
       ],
     );
   }
@@ -219,10 +221,13 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
             backgroundColor: AppColors.background,
             iconTheme: const IconThemeData(color: AppColors.textPrimary),
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(widget.venue.name,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold)),
+              title: Text(
+                widget.venue.name,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               background: CachedNetworkImage(
                 imageUrl: widget.venue.imageUrl,
                 fit: BoxFit.cover,
@@ -239,42 +244,58 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.location_on,
-                          color: AppColors.textSecondary, size: 16),
+                      const Icon(
+                        Icons.location_on,
+                        color: AppColors.textSecondary,
+                        size: 16,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: Text(widget.venue.address,
-                            style: const TextStyle(
-                                color: AppColors.textSecondary)),
+                        child: Text(
+                          widget.venue.address,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(widget.venue.sport,
-                            style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          widget.venue.sport,
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      const Text('Select Date',
-                          style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Select Date',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const Spacer(),
                       GestureDetector(
                         onTap: _pickDate,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.card,
                             borderRadius: BorderRadius.circular(12),
@@ -282,13 +303,19 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.calendar_today,
-                                  color: AppColors.primary, size: 16),
+                              const Icon(
+                                Icons.calendar_today,
+                                color: AppColors.primary,
+                                size: 16,
+                              ),
                               const SizedBox(width: 8),
-                              Text(_displayDate,
-                                  style: const TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                _displayDate,
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -305,27 +332,34 @@ class _VenueDetailBodyState extends State<_VenueDetailBody> {
                   ),
                   const SizedBox(height: 16),
                   BlocBuilder<SlotCubit, SlotState>(
+                    bloc: slotCubit,
                     builder: (context, state) {
                       if (state is SlotLoading) {
                         return const Center(
-                            child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: CircularProgressIndicator(
-                              color: AppColors.primary),
-                        ));
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        );
                       }
                       if (state is SlotError) {
                         return Center(
-                            child: Text(state.message,
-                                style: const TextStyle(
-                                    color: AppColors.booked)));
+                          child: Text(
+                            state.message,
+                            style: const TextStyle(color: AppColors.booked),
+                          ),
+                        );
                       }
                       if (state is SlotLoaded) {
                         if (state.slots.isEmpty) {
                           return const Center(
-                              child: Text('No slots available',
-                                  style: TextStyle(
-                                      color: AppColors.textSecondary)));
+                            child: Text(
+                              'No slots available',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          );
                         }
                         return SlotGrid(
                           slots: state.slots,

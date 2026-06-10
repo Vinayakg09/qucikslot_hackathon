@@ -1,23 +1,20 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../models/user.dart';
-import '../../repo/api_client.dart';
+import 'package:qucik_slot/repo/repository_impl.dart';
 import 'auth_state.dart';
 
 class AuthCubit extends Cubit<AuthState> {
   AuthCubit() : super(AuthInitial());
 
+  final RepositoryImpl _repo = RepositoryImpl();
+
   Future<void> loadUsers() async {
     emit(AuthLoading());
-    try {
-      final data = await ApiClient.get('/users');
-      final users = (data as List).map((e) => User.fromJson(e)).toList();
-      emit(AuthUsersLoaded(users));
-    } catch (e) {
-      emit(AuthError(e.toString()));
-    }
+    final result = await _repo.getUsers();
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (users) => emit(AuthUsersLoaded(users)),
+    );
   }
 
-  void selectUser(User user) {
-    emit(AuthAuthenticated(user));
-  }
+  void selectUser(user) => emit(AuthAuthenticated(user));
 }

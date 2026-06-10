@@ -1,27 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../cubit/auth/auth_cubit.dart';
-import '../../cubit/auth/auth_state.dart';
 import '../../cubit/booking/booking_cubit.dart';
 import '../../cubit/booking/booking_state.dart';
 import '../../res/app_colors.dart';
 import '../widgets/booking_card.dart';
 
 class MyBookingsScreen extends StatefulWidget {
-  const MyBookingsScreen({super.key});
+  final String userId;
+  const MyBookingsScreen({super.key, required this.userId});
 
   @override
   State<MyBookingsScreen> createState() => _MyBookingsScreenState();
 }
 
 class _MyBookingsScreenState extends State<MyBookingsScreen> {
+  late final BookingCubit cubit;
+
   @override
   void initState() {
     super.initState();
-    final authState = context.read<AuthCubit>().state;
-    if (authState is AuthAuthenticated) {
-      context.read<BookingCubit>().loadUserBookings(authState.user.id);
-    }
+    cubit = BookingCubit();
+    cubit.loadUserBookings(widget.userId);
+  }
+
+  @override
+  void dispose() {
+    cubit.close();
+    super.dispose();
+  }
+
+  void _confirmCancel(BuildContext context, String bookingId) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text(
+          'Cancel Booking',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: const Text(
+          'Are you sure you want to cancel this booking?',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'No',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              cubit.cancelBooking(bookingId, widget.userId);
+            },
+            child: const Text(
+              'Yes, Cancel',
+              style: TextStyle(color: AppColors.booked),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -41,6 +82,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
       body: BlocBuilder<BookingCubit, BookingState>(
+        bloc: cubit,
         builder: (context, state) {
           if (state is BookingLoading) {
             return const Center(
@@ -98,48 +140,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
           }
           return const SizedBox();
         },
-      ),
-    );
-  }
-
-  void _confirmCancel(BuildContext context, String bookingId) {
-    final authState = context.read<AuthCubit>().state;
-    if (authState is! AuthAuthenticated) return;
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text(
-          'Cancel Booking',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: const Text(
-          'Are you sure you want to cancel this booking?',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'No',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.read<BookingCubit>().cancelBooking(
-                bookingId,
-                authState.user.id,
-              );
-            },
-            child: const Text(
-              'Yes, Cancel',
-              style: TextStyle(color: AppColors.booked),
-            ),
-          ),
-        ],
       ),
     );
   }

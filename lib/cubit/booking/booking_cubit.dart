@@ -1,20 +1,19 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../repo/booking_repo.dart';
-import '../../repo/api_client.dart';
+import 'package:qucik_slot/repo/repository_impl.dart';
 import 'booking_state.dart';
 
 class BookingCubit extends Cubit<BookingState> {
-  final BookingRepo _repo;
-  BookingCubit(this._repo) : super(BookingInitial());
+  BookingCubit() : super(BookingInitial());
+
+  final RepositoryImpl _repo = RepositoryImpl();
 
   Future<void> loadUserBookings(String userId) async {
     emit(BookingLoading());
-    try {
-      final bookings = await _repo.getUserBookings(userId);
-      emit(BookingLoaded(bookings));
-    } catch (e) {
-      emit(BookingError(e.toString()));
-    }
+    final result = await _repo.getUserBookings(userId: userId);
+    result.fold(
+      (failure) => emit(BookingError(failure.message)),
+      (bookings) => emit(BookingLoaded(bookings)),
+    );
   }
 
   Future<void> createBooking({
@@ -23,26 +22,27 @@ class BookingCubit extends Cubit<BookingState> {
     required String userId,
   }) async {
     emit(BookingLoading());
-    try {
-      final result = await _repo.createBooking(
-        slotId: slotId,
-        date: date,
-        userId: userId,
-      );
-      emit(BookingSuccess(result['id']));
-    } on ConflictException {
-      emit(BookingConflict());
-    } catch (e) {
-      emit(BookingError(e.toString()));
-    }
+    final result = await _repo.createBooking(
+      slotId: slotId,
+      date: date,
+      userId: userId,
+    );
+    result.fold(
+      (failure) => failure.message == 'CONFLICT'
+          ? emit(BookingConflict())
+          : emit(BookingError(failure.message)),
+      (booking) => emit(BookingSuccess(booking.id)),
+    );
   }
 
   Future<void> cancelBooking(String bookingId, String userId) async {
-    try {
-      await _repo.cancelBooking(bookingId, userId);
-      await loadUserBookings(userId);
-    } catch (e) {
-      emit(BookingError(e.toString()));
-    }
+    final result = await _repo.cancelBooking(
+      bookingId: bookingId,
+      userId: userId,
+    );
+    result.fold(
+      (failure) => emit(BookingError(failure.message)),
+      (_) => loadUserBookings(userId),
+    );
   }
 }
