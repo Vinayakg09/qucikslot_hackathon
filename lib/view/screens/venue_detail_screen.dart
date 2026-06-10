@@ -163,6 +163,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                             'Confirm Booking',
                             style: TextStyle(
                               fontSize: 16,
+                              color: Colors.white,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
